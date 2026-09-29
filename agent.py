@@ -10,7 +10,7 @@ step. **That branch is the graded part of this unit.**
 
 Build and test your three tools in `tools.py` first. Then come here.
 
-    python agent.py          runs both example paths below
+    python agent.py            runs both example paths below
 """
 
 import config
