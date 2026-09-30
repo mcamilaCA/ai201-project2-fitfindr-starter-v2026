@@ -93,13 +93,17 @@
      The grader checks your code against what you claim here, so the file and
      function have to be real. -->
 
-**Branch rule:**
+**Branch rule:** If search_listings returns an empty string, drop the tightest filter (in most cases this will be "max_price") and call "search_listings" again. If there was a match, highlight the change to the user and provide the result. If no match was found, write a message in the session and stop.
 
 **Where it lives:** `agent.py::run_agent`
 
-**How the query is parsed:** <!-- regex, string splitting, or asking the model — say which -->
+**How the query is parsed:** will use regex to see the "under $" in the "max_price" parameter, then will strip the substrings and use the leftover string as new description to send to "parse_query()" once more.
 
-**What moves through the session:** <!-- which fields, in what order -->
+**What moves through the session:** would create a new "relaxed" optional parameter to new_session() to use when a retry is needed, the flow would the look like: 
+parsed (regex from raw query) -> search_results -> 
+1) if empty -> parsed (drop max_price from raw query) -> set session to "relaxed" -> if matched -> override session["search_results"] with new results -> selected_item -> suggest_outfit -> fit card 
+2) if still empty -> session['error'] and return 
+
 
 ---
 
