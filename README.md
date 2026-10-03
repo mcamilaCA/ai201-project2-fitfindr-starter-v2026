@@ -119,9 +119,25 @@ A listing needs at least 2 keyword matches (`MIN_KEYWORD_MATCHES` in `tools.py`)
 **One full query**
 
 ```
-$ python app.py ask '...'
+python app.py ask 'vintage graphic tee under $1'                                  
 
 ```
+Output: 
+
+  Note:     Nothing matched under $1, so I searched again without the price limit. This result may cost more than youwanted.
+
+  Found:    Y2K Baby Tee — Butterfly Print — $18.0 on depop
+
+  Outfit:   * Pair the butterfly baby tee with the dark wash baggy straight-leg jeans, layered under the slightly cropped vintage black denim jacket, and finish with chunky white sneakers and the black crossbody bag for an effortless Y2K streetwear look.
+* Tuck the baby tee into the wide-leg khaki trousers, add the brown leather belt at the waist, and wear the black combat boots to lean into a vintage, earth-toned aesthetic.
+
+  Fit card: Nothing matched under $1, so I searched again without the price limit. This result may cost more than youwanted.
+
+Scored this gorgeous pink and purple butterfly baby tee on Depop for just $18.00. 🦋 I'm styling it for an effortlessY2K streetwear look with dark wash baggy straight-leg jeans, a cropped vintage black denim jacket, and chunky white sneakers. 👖✨
+
+#Y2KStreetwear #ThriftFinds
+
+0 model calls this session, 2 served from cache
 
 **The three tools, tested one at a time**
 
