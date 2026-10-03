@@ -104,6 +104,24 @@ def cmd_examples(args):
     )
 
 
+def _price_table(rows):
+    """Format session["comparison"] rows as a table. Empty rows -> empty string."""
+    if not rows:
+        return ""
+    lines = [
+        f"  {'#':<3}{'title':<40}{'price':>8}  {'vs cheapest':<12}{'size':<12}{'condition':<12}platform",
+        "  " + "-" * 100,
+    ]
+    for r in rows:
+        vs = "cheapest" if r["vs_cheapest"] == 0 else f"+${r['vs_cheapest']:.2f}"
+        title = r["title"] if len(r["title"]) <= 38 else r["title"][:37] + "…"
+        lines.append(
+            f"  {r['rank']:<3}{title:<40}{r['price']:>8.2f}  {vs:<12}"
+            f"{str(r['size'])[:11]:<12}{str(r['condition'] or '-')[:11]:<12}{r['platform']}"
+        )
+    return "\n".join(lines)
+
+
 def _ask_one(query, wardrobe, use_trace):
     from agent import run_agent
     import trace as trace_module
@@ -122,6 +140,11 @@ def _ask_one(query, wardrobe, use_trace):
             print()
         item = session["selected_item"] or {}
         print(f"  Found:    {item.get('title')} — ${item.get('price')} on {item.get('platform')}")
+        table = _price_table(session["comparison"])
+        if table:
+            print()
+            print("  Price comparison (top 3):")
+            print(table)
         print()
         print(f"  Outfit:   {session['outfit_suggestion']}")
         print()

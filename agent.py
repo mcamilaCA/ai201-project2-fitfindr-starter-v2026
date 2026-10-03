@@ -49,7 +49,29 @@ def new_session(query: str, wardrobe: dict, relaxed: str | None = None) -> dict:
         "relaxed": relaxed,          # set when the retry dropped a filter, e.g. "max_price"
         "notice": None,              # user-facing message about the relaxed retry
         "suggestions": [],           # which fields to change when nothing matched
+        "comparison": [],            # price rows for the top results — only set when 2+ matched
     }
+
+
+COMPARE_TOP_N = 3
+
+
+def build_comparison(results: list[dict], top: int = COMPARE_TOP_N) -> list[dict]:
+    """Price-comparison rows for the top results, each with its gap to the cheapest."""
+    rows = results[:top]
+    cheapest = min(r["price"] for r in rows)
+    return [
+        {
+            "rank": i,
+            "title": r["title"],
+            "price": r["price"],
+            "vs_cheapest": round(r["price"] - cheapest, 2),
+            "size": r["size"],
+            "condition": r.get("condition"),
+            "platform": r["platform"],
+        }
+        for i, r in enumerate(rows, 1)
+    ]
 
 
 # ── query parsing ─────────────────────────────────────────────────────────────
@@ -217,6 +239,12 @@ def run_agent(query: str, wardrobe: dict) -> dict:
         return session
 
     session["selected_item"] = session["search_results"][0]
+
+    # SECOND BRANCH: more than one listing matched — there is a choice to make,
+    # so build a price comparison. With exactly one match there is nothing to
+    # compare and session["comparison"] stays empty.
+    if len(session["search_results"]) > 1:
+        session["comparison"] = build_comparison(session["search_results"])
 
     try:
         session["outfit_suggestion"] = suggest_outfit(

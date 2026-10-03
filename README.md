@@ -103,6 +103,7 @@ This system is meant to help find thrift items and simmultaneously creating outf
 parsed (regex from raw query) -> search_results ->
 1) if empty and a max_price was given -> search again with max_price=None -> if matched -> set session["relaxed"] and session["notice"] -> selected_item -> suggest_outfit -> fit card (notice is prepended)
 2) if still empty -> session['error'] (built from `_suggest_changes`) -> return before any model call
+3) if more than one result -> session["comparison"] (top 3 with price gap to the cheapest) -> printed by `app.py::_price_table`
 
 A listing needs at least 2 keyword matches (`MIN_KEYWORD_MATCHES` in `tools.py`), so a query with too many unmatched words can reach the error path.
 
@@ -306,6 +307,43 @@ full. -->
 
 <!-- If it made things worse, say that. Honestly reported, that earns full
      credit and is more interesting than one that worked. -->
+
+
+
+---
+
+## Stretch Features:
+
+### 1. Price Comparison
+
+When a search returns two or more listings, `python app.py ask` prints a table comparing the top 3 results between the found item and the outfit suggestion. The table is formatted by `_price_table()` in `app.py` from `session["comparison"]`, which the second branch below fills. It adds no tool calls and no model calls.
+
+```
+  Price comparison (top 3):
+  #  title                                      price  vs cheapest size        condition   platform
+  ----------------------------------------------------------------------------------------------------
+  1  Y2K Baby Tee — Butterfly Print             18.00  cheapest    S/M         excellent   depop
+  2  Graphic Tee — 2003 Tour Bootleg Style      24.00  +$6.00      L           good        depop
+  3  Vintage Band Tee — Faded Grey              19.00  +$1.00      L           fair        depop
+```
+
+- Rows keep the search ranking (best match first), not price order. The **vs cheapest** column shows the price gap.
+- With fewer than two results there is nothing to compare, so the table is skipped.
+- It only appears in the CLI `ask` output. The agent's `_show()` and the eval output are unchanged.
+
+### 2. Second Branch: Compare When More Than One Match
+
+**Branch rule:** If `search_listings` returns more than one listing, build a price comparison of the top 3 and put it in `session["comparison"]`. If exactly one matched, there is nothing to compare, so `session["comparison"]` stays empty. Either way the loop goes on to `suggest_outfit` with the first result. If nothing matched, the first branch (the empty-search error) has already returned, so this one never runs.
+
+**Where it lives:** `agent.py::run_agent`, with the rows built by `agent.py::build_comparison`. It sits after the empty-search branch and before `suggest_outfit`.
+
+Each row holds `rank`, `title`, `price`, `vs_cheapest`, `size`, `condition` and `platform`. I checked all three paths without the model:
+
+| Query | Results | `session["comparison"]` | Error |
+|---|---|---|---|
+| vintage graphic tee under $30 | 5 | 3 rows | no |
+| (one listing matched) | 1 | empty | no |
+| designer ballgown size XXS under $5 | 0 | empty | yes, stopped before any model call |
 
 
 
