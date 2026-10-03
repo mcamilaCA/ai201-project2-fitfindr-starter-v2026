@@ -40,9 +40,22 @@ def _size_matches(query_size: str, listing_size: str) -> bool:
     return bool(query_tokens) and query_tokens.issubset(listing_tokens)
 
 
+# filler words that would otherwise "match" almost any listing
+_STOP_WORDS = {
+    "a", "an", "and", "the", "with", "for", "of", "in", "on", "to", "or",
+    "i", "me", "my", "im", "looking", "want", "need", "find", "some", "any",
+    "something", "that", "is", "are", "it", "under", "size",
+}
+MIN_KEYWORD_MATCHES = 2
+
+
+def _keywords(text: str) -> set[str]:
+    return _tokenize(text) - _STOP_WORDS
+
+
 def _keyword_score(description: str, listing: dict) -> int:
-    # raw overlap count between description words and the listing's text
-    query_tokens = _tokenize(description)
+    # overlap count between description keywords (stop words removed) and the listing's text
+    query_tokens = _keywords(description)
     listing_text = " ".join([
         listing.get("title", ""),
         listing.get("description", ""),
@@ -50,7 +63,7 @@ def _keyword_score(description: str, listing: dict) -> int:
         " ".join(listing.get("style_tags") or []),
         listing.get("brand") or "",
     ])
-    return len(query_tokens & _tokenize(listing_text))
+    return len(query_tokens & _keywords(listing_text))
 
 
 def _filter_and_score(
@@ -59,17 +72,30 @@ def _filter_and_score(
     size: str | None,
     max_price: float | None,
 ) -> list[dict]:
-    # applies every filter that is passed in; the agent retries with max_price=None
+    # applies every filter passed in, plus the keyword minimum; the agent retries with max_price=None
     candidates = listings
     if max_price is not None:
         candidates = [l for l in candidates if l["price"] <= max_price]
     if size is not None:
         candidates = [l for l in candidates if _size_matches(size, l["size"])]
 
+    # need MIN_KEYWORD_MATCHES hits, or every keyword if the query has fewer than that
+    needed = min(MIN_KEYWORD_MATCHES, len(_keywords(description)))
     scored = [(_keyword_score(description, l), l) for l in candidates]
-    scored = [pair for pair in scored if pair[0] > 0]
+    scored = [pair for pair in scored if needed > 0 and pair[0] >= needed]
     scored.sort(key=lambda pair: pair[0], reverse=True)
     return [l for _, l in scored[: config.SEARCH_RESULT_LIMIT]]
+
+
+def unmatched_keywords(description: str) -> list[str]:
+    """Keywords in the description that appear in no listing at all (likely typos or things we don't carry)."""
+    seen = set()
+    for l in load_listings():
+        seen |= _keywords(" ".join([
+            l.get("title", ""), l.get("description", ""), l.get("category", ""),
+            " ".join(l.get("style_tags") or []), l.get("brand") or "",
+        ]))
+    return sorted(w for w in _keywords(description) if w not in seen)
 
 
 # ── Tool 1: search_listings ───────────────────────────────────────────────────

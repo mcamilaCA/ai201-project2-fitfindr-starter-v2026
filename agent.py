@@ -17,7 +17,7 @@ import re
 
 import config
 import trace
-from tools import search_listings, suggest_outfit, create_fit_card
+from tools import search_listings, suggest_outfit, create_fit_card, unmatched_keywords
 from generate import ModelUnavailable
 
 
@@ -48,13 +48,14 @@ def new_session(query: str, wardrobe: dict, relaxed: str | None = None) -> dict:
         "error": None,               # set when the run ended early
         "relaxed": relaxed,          # set when the retry dropped a filter, e.g. "max_price"
         "notice": None,              # user-facing message about the relaxed retry
+        "suggestions": [],           # which fields to change when nothing matched
     }
 
 
 # ── query parsing ─────────────────────────────────────────────────────────────
 
 _PRICE_RE = re.compile(
-    r"\b(?:under|below|less than|max(?:imum)?|up to)\s*\$?\s*(\d+(?:\.\d+)?)"
+    r"\b(?:under|below|less than|max(?:imum)?|up to)\s*\$?\s*(\d+(?:\.\d+)?)(?:\s*(?:dollars?|bucks|usd)\b)?"
     r"|\$\s*(\d+(?:\.\d+)?)",
     re.IGNORECASE,
 )
@@ -80,6 +81,38 @@ def parse_query(query: str) -> dict:
     description = re.sub(r"[,;]+", " ", description)
     description = re.sub(r"\s+", " ", description).strip()
     return {"description": description, "size": size, "max_price": max_price}
+
+
+def _suggest_changes(parsed: dict) -> list[str]:
+    """Work out which field(s) to change after a search with every filter relaxed that still failed."""
+    suggestions = []
+    description, size = parsed["description"], parsed["size"]
+
+    # Size: would dropping it produce a match?
+    if size is not None:
+        without_size = search_listings(description, None, None)
+        if without_size:
+            sizes = sorted({r["size"] for r in without_size})
+            suggestions.append(
+                f"size: nothing matched in size {size}, but \"{description}\" exists in "
+                f"{', '.join(sizes[:5])}. Try one of those sizes or leave size out."
+            )
+            return suggestions
+
+    # Description: otherwise the words are the problem.
+    unknown = unmatched_keywords(description)
+    if unknown:
+        suggestions.append(
+            f"description: no listing contains {', '.join(repr(w) for w in unknown)}. "
+            "Check the spelling or replace it with a more general word."
+        )
+    suggestions.append(
+        "description: use fewer, broader words (e.g. the item type like 'tee' or "
+        "'jacket' plus one style word) — a listing needs at least 2 of your keywords."
+    )
+    if parsed["max_price"] is not None:
+        suggestions.append("max_price: raising it won't help — nothing matched even with no price limit.")
+    return suggestions
 
 
 # ── planning loop ─────────────────────────────────────────────────────────────
@@ -143,48 +176,52 @@ def run_agent(query: str, wardrobe: dict) -> dict:
     session = new_session(query, wardrobe)
     count = 0
 
-    # Parse once from the raw query. A retry only changes max_price, so the
-    # description is the same string parse_query() produced the first time.
-    parsed = parse_query(query)
-    session["parsed"] = parsed
+    # Parse once from the raw query. session["parsed"] keeps the user's original
+    # filters, even after a retry drops one — session["relaxed"] records that.
+    session["parsed"] = parse_query(query)
 
     # Attempt 1 uses every filter. Attempt 2 (the branch) drops max_price —
     # but only if there was a max_price to drop.
-    attempts = [parsed["max_price"]]
-    if parsed["max_price"] is not None:
+    attempts = [session["parsed"]["max_price"]]
+    if session["parsed"]["max_price"] is not None:
         attempts.append(None)
 
-    results = []
     for max_price in attempts:
         count += 1
         trace.check_iterations(count)
 
-        results = search_listings(parsed["description"], parsed["size"], max_price)
-        session["search_results"] = results
-        if results:
-            if max_price is None and parsed["max_price"] is not None:
+        session["search_results"] = search_listings(
+            session["parsed"]["description"], session["parsed"]["size"], max_price
+        )
+        if session["search_results"]:
+            if max_price is None and session["parsed"]["max_price"] is not None:
                 session["relaxed"] = "max_price"
                 session["notice"] = (
-                    f"Nothing matched under ${parsed['max_price']:g}, so I searched again "
-                    "without the price limit. This result may cost more than you wanted."
+                    f"Nothing matched under ${session['parsed']['max_price']:g}, so I "
+                    "searched again without the price limit. This result may cost "
+                    "more than you wanted."
                 )
-                session["parsed"] = {**parsed, "max_price": None}
             break
 
     # THE BRANCH: nothing matched even after relaxing — stop before any model call.
-    if not results:
-        tried = f" under ${parsed['max_price']:g}" if parsed["max_price"] is not None else ""
-        size = f" in size {parsed['size']}" if parsed["size"] else ""
+    if not session["search_results"]:
+        p = session["parsed"]
+        tried = f" under ${p['max_price']:g}" if p["max_price"] is not None else ""
+        size = f" in size {p['size']}" if p["size"] else ""
+        session["suggestions"] = _suggest_changes(p)
         session["error"] = (
-            f"No listings matched \"{parsed['description']}\"{size}{tried}. "
-            "Try a broader description, a different size, or fewer keywords."
+            f"No match was found for \"{p['description']}\"{size}{tried}"
+            f"{', even without the price limit' if p['max_price'] is not None else ''}. What to change:\n- "
+            + "\n- ".join(session["suggestions"])
         )
         return session
 
-    session["selected_item"] = results[0]
+    session["selected_item"] = session["search_results"][0]
 
     try:
-        session["outfit_suggestion"] = suggest_outfit(session["selected_item"], wardrobe)
+        session["outfit_suggestion"] = suggest_outfit(
+            session["selected_item"], session["wardrobe"]
+        )
         session["fit_card"] = create_fit_card(
             session["outfit_suggestion"], session["selected_item"]
         )
