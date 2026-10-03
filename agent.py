@@ -13,6 +13,8 @@ Build and test your three tools in `tools.py` first. Then come here.
     python agent.py            runs both example paths below
 """
 
+import re
+
 import config
 import trace
 from tools import search_listings, suggest_outfit, create_fit_card
@@ -21,7 +23,7 @@ from generate import ModelUnavailable
 
 # ── session state ─────────────────────────────────────────────────────────────
 
-def new_session(query: str, wardrobe: dict) -> dict:
+def new_session(query: str, wardrobe: dict, relaxed: str | None = None) -> dict:
     """
     A fresh session for one user interaction.
 
@@ -44,7 +46,40 @@ def new_session(query: str, wardrobe: dict) -> dict:
         "outfit_suggestion": None,   # what suggest_outfit returned
         "fit_card": None,            # what create_fit_card returned
         "error": None,               # set when the run ended early
+        "relaxed": relaxed,          # set when the retry dropped a filter, e.g. "max_price"
+        "notice": None,              # user-facing message about the relaxed retry
     }
+
+
+# ── query parsing ─────────────────────────────────────────────────────────────
+
+_PRICE_RE = re.compile(
+    r"\b(?:under|below|less than|max(?:imum)?|up to)\s*\$?\s*(\d+(?:\.\d+)?)"
+    r"|\$\s*(\d+(?:\.\d+)?)",
+    re.IGNORECASE,
+)
+_SIZE_RE = re.compile(r"\bsize\s+([A-Za-z0-9/]+)", re.IGNORECASE)
+
+
+def parse_query(query: str) -> dict:
+    """Regex-parse a plain-language query into description / size / max_price."""
+    max_price = None
+    size = None
+    description = query
+
+    m = _PRICE_RE.search(description)
+    if m:
+        max_price = float(m.group(1) or m.group(2))
+        description = description.replace(m.group(0), " ")
+
+    m = _SIZE_RE.search(description)
+    if m:
+        size = m.group(1)
+        description = description.replace(m.group(0), " ")
+
+    description = re.sub(r"[,;]+", " ", description)
+    description = re.sub(r"\s+", " ", description).strip()
+    return {"description": description, "size": size, "max_price": max_price}
 
 
 # ── planning loop ─────────────────────────────────────────────────────────────
@@ -106,9 +141,57 @@ def run_agent(query: str, wardrobe: dict) -> dict:
         than a stack trace. The import is already at the top of this file.
     """
     session = new_session(query, wardrobe)
+    count = 0
 
-    # TODO: delete these two lines and build the loop.
-    session["error"] = "The planning loop isn't built yet — see the TODO in agent.py."
+    # Parse once from the raw query. A retry only changes max_price, so the
+    # description is the same string parse_query() produced the first time.
+    parsed = parse_query(query)
+    session["parsed"] = parsed
+
+    # Attempt 1 uses every filter. Attempt 2 (the branch) drops max_price —
+    # but only if there was a max_price to drop.
+    attempts = [parsed["max_price"]]
+    if parsed["max_price"] is not None:
+        attempts.append(None)
+
+    results = []
+    for max_price in attempts:
+        count += 1
+        trace.check_iterations(count)
+
+        results = search_listings(parsed["description"], parsed["size"], max_price)
+        session["search_results"] = results
+        if results:
+            if max_price is None and parsed["max_price"] is not None:
+                session["relaxed"] = "max_price"
+                session["notice"] = (
+                    f"Nothing matched under ${parsed['max_price']:g}, so I searched again "
+                    "without the price limit. This result may cost more than you wanted."
+                )
+                session["parsed"] = {**parsed, "max_price": None}
+            break
+
+    # THE BRANCH: nothing matched even after relaxing — stop before any model call.
+    if not results:
+        tried = f" under ${parsed['max_price']:g}" if parsed["max_price"] is not None else ""
+        size = f" in size {parsed['size']}" if parsed["size"] else ""
+        session["error"] = (
+            f"No listings matched \"{parsed['description']}\"{size}{tried}. "
+            "Try a broader description, a different size, or fewer keywords."
+        )
+        return session
+
+    session["selected_item"] = results[0]
+
+    try:
+        session["outfit_suggestion"] = suggest_outfit(session["selected_item"], wardrobe)
+        session["fit_card"] = create_fit_card(
+            session["outfit_suggestion"], session["selected_item"]
+        )
+        if session["notice"]:
+            session["fit_card"] = f"{session['notice']}\n\n{session['fit_card']}"
+    except ModelUnavailable as e:
+        session["error"] = f"The model isn't available right now: {e}"
     return session
 
 
@@ -120,6 +203,8 @@ def _show(session: dict) -> None:
         print(f"  fit_card is {session['fit_card']!r} — it should still be None here")
         return
 
+    if session["notice"]:
+        print(f"  note:     {session['notice']}")
     item = session["selected_item"] or {}
     print(f"  found:    {item.get('title')} — ${item.get('price')} on {item.get('platform')}")
     print(f"  outfit:   {session['outfit_suggestion']}")

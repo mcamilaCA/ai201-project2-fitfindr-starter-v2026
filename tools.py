@@ -59,7 +59,7 @@ def _filter_and_score(
     size: str | None,
     max_price: float | None,
 ) -> list[dict]:
-    # shared by the strict pass and the relaxed (no max_price) retry
+    # applies every filter that is passed in; the agent retries with max_price=None
     candidates = listings
     if max_price is not None:
         candidates = [l for l in candidates if l["price"] <= max_price]
@@ -127,15 +127,8 @@ def search_listings(
     """
     listings = load_listings()
 
-    strict = _filter_and_score(listings, description, size, max_price)
-    if strict:
-        return strict
-
-    # relaxed retry: drop max_price only, keep size + keyword requirements
-    if max_price is not None:
-        return _filter_and_score(listings, description, size, None)
-
-    return []
+    # no fallback here: relaxing max_price is the agent's branch (agent.py::run_agent)
+    return _filter_and_score(listings, description, size, max_price)
 
 
 # ── Tool 2: suggest_outfit ────────────────────────────────────────────────────
