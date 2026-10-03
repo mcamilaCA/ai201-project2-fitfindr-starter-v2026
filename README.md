@@ -93,16 +93,18 @@ This system is meant to help find thrift items and simmultaneously creating outf
      The grader checks your code against what you claim here, so the file and
      function have to be real. -->
 
-**Branch rule:** If search_listings returns an empty string, drop the tightest filter (in most cases this will be "max_price") and call "search_listings" again. If there was a match, highlight the change to the user and provide the result. If no match was found, write a message in the session and stop.
+**Branch rule:** If search_listings returns an empty list, drop the "max_price" and call "search_listings" again. If there was a match, highlight the change to the user in session['notice'] and fit_card and provide the result. If no match was found, write a message in the session and stop.
 
 **Where it lives:** `agent.py::run_agent`
 
-**How the query is parsed:** will use regex to see the "under $" in the "max_price" parameter, then will strip the substrings and use the leftover string as new description to send to "parse_query()" once more.
+**How the query is parsed:** regex, in `parse_query()`. One pattern pulls `max_price` from phrases like "under $30", and one pulls `size` from "size M". Both are stripped out, and what's left is the description. The query is parsed once; a retry reuses the same description and size with `max_price=None`.
 
-**What moves through the session:** would create a new "relaxed" optional parameter to new_session() to use when a retry is needed, the flow would the look like: 
-parsed (regex from raw query) -> search_results -> 
-1) if empty -> parsed (drop max_price from raw query) -> set session to "relaxed" -> if matched -> override session["search_results"] with new results -> selected_item -> suggest_outfit -> fit card 
-2) if still empty -> session['error'] and return 
+**What moves through the session:** `new_session()` takes an optional `relaxed` parameter, set to `"max_price"` when the retry drops the price limit. `session["parsed"]` keeps the user's original filters. The flow:
+parsed (regex from raw query) -> search_results ->
+1) if empty and a max_price was given -> search again with max_price=None -> if matched -> set session["relaxed"] and session["notice"] -> selected_item -> suggest_outfit -> fit card (notice is prepended)
+2) if still empty -> session['error'] (built from `_suggest_changes`) -> return before any model call
+
+A listing needs at least 2 keyword matches (`MIN_KEYWORD_MATCHES` in `tools.py`), so a query with too many unmatched words can reach the error path.
 
 
 ---
