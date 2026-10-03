@@ -8,6 +8,8 @@ FitFindr — command line.
     python app.py listings                browse the data  (Milestone 1)
     python app.py fields                  what fields a listing has
     python app.py examples                queries worth trying, including a dud
+    python app.py wardrobe                show your saved wardrobe (style memory)
+    python app.py ask '...' --save        keep the item you find in that wardrobe
 
 Add --trace to any `ask` to print the loop step by step.
 
@@ -161,17 +163,48 @@ def _ask_one(query, wardrobe, use_trace):
     return session
 
 
+def _save_found_item(session, wardrobe):
+    """--save: add the item the run found to the saved wardrobe (style memory)."""
+    import wardrobe_store
+
+    item = session["selected_item"]
+    if session["error"] or not item:
+        print("  (--save: nothing was found, so nothing was saved)\n")
+        return
+    try:
+        stored = wardrobe_store.add_item(wardrobe, wardrobe_store.listing_to_item(item))
+    except ValueError as exc:
+        print(f"  (--save: {exc})\n")
+        return
+    wardrobe_store.save_wardrobe(wardrobe)
+    print(f"  Saved {stored['id']} \"{stored['name']}\" to your wardrobe "
+          f"({len(wardrobe['items'])} items).\n")
+
+
 def cmd_ask(args):
     from utils.data_loader import get_example_wardrobe, get_empty_wardrobe
     import generate
+    import wardrobe_store
 
-    wardrobe = get_empty_wardrobe() if args.empty_wardrobe else get_example_wardrobe()
     if args.empty_wardrobe:
+        wardrobe = get_empty_wardrobe()
         print("(running with an empty wardrobe)")
+    else:
+        wardrobe = wardrobe_store.load_wardrobe()
+        if wardrobe is not None:
+            print(f"(using your saved wardrobe: {len(wardrobe['items'])} items)")
+        else:
+            wardrobe = get_example_wardrobe()
+            if args.save:
+                # --save needs somewhere to save to: start a new, empty closet
+                wardrobe = get_empty_wardrobe()
+                print("(no saved wardrobe yet — starting one; --save will add what you find)")
 
     try:
         if args.query:
-            _ask_one(args.query, wardrobe, args.trace)
+            session = _ask_one(args.query, wardrobe, args.trace)
+            if args.save:
+                _save_found_item(session, wardrobe)
         else:
             print("Ask for something, or press Enter on an empty line to quit.\n")
             while True:
@@ -182,9 +215,74 @@ def cmd_ask(args):
                     break
                 if not query:
                     break
-                _ask_one(query, wardrobe, args.trace)
+                session = _ask_one(query, wardrobe, args.trace)
+                if args.save:
+                    _save_found_item(session, wardrobe)
     finally:
         print(generate.usage())
+
+
+def cmd_wardrobe(args):
+    """Style memory — view and edit the wardrobe saved between runs."""
+    import wardrobe_store as store
+    from utils.data_loader import get_example_wardrobe
+
+    wardrobe = store.load_wardrobe()
+
+    if args.action == "seed":
+        if wardrobe is not None and wardrobe["items"] and not args.force:
+            print(f"You already have {len(wardrobe['items'])} saved items. "
+                  "Use --force to replace them with the example wardrobe.")
+            return
+        store.save_wardrobe(get_example_wardrobe())
+        print("Saved the example wardrobe (10 items). Edit it with add / remove.")
+        return
+
+    if args.action == "clear":
+        if wardrobe is None:
+            print("Nothing saved.")
+            return
+        store.save_wardrobe({"items": []})
+        print("Wardrobe cleared.")
+        return
+
+    if wardrobe is None:
+        wardrobe = {"items": []}
+
+    if args.action == "add":
+        if not args.name or not args.category:
+            raise SystemExit("add needs a name and --category, e.g. "
+                             "python app.py wardrobe add 'Red cardigan' --category tops")
+        stored = store.add_item(wardrobe, {
+            "name": args.name,
+            "category": args.category,
+            "colors": [c.strip() for c in args.colors.split(",") if c.strip()],
+            "style_tags": [t.strip() for t in args.tags.split(",") if t.strip()],
+            "notes": args.notes,
+        })
+        store.save_wardrobe(wardrobe)
+        print(f"Added {stored['id']} \"{stored['name']}\" ({len(wardrobe['items'])} items).")
+    elif args.action == "remove":
+        if not args.name:
+            raise SystemExit("remove needs an id or name, e.g. python app.py wardrobe remove w_003")
+        try:
+            gone = store.remove_item(wardrobe, args.name)
+        except KeyError as exc:
+            raise SystemExit(str(exc).strip("'\""))
+        store.save_wardrobe(wardrobe)
+        print(f"Removed {gone['id']} \"{gone['name']}\" ({len(wardrobe['items'])} items left).")
+    else:  # show
+        if not wardrobe["items"]:
+            print("No saved wardrobe yet. Start one with:\n"
+                  "  python app.py wardrobe seed                 (copy the example wardrobe)\n"
+                  "  python app.py wardrobe add 'Name' --category tops\n"
+                  "  python app.py ask '...' --save              (keep what you find)")
+            return
+        print(f"{len(wardrobe['items'])} saved items  ({store.WARDROBE_PATH})\n")
+        print(f"  {'id':<7}{'category':<12}{'name':<44}colors")
+        print("  " + "-" * 80)
+        for it in wardrobe["items"]:
+            print(f"  {it['id']:<7}{it['category']:<12}{it['name'][:42]:<44}{', '.join(it['colors'])}")
 
 
 def build_parser():
@@ -215,7 +313,23 @@ def build_parser():
         action="store_true",
         help="run as a user with nothing saved — one of unit 4's failure modes",
     )
+    p_ask.add_argument(
+        "--save",
+        action="store_true",
+        help="add the item you find to your saved wardrobe (style memory)",
+    )
     p_ask.set_defaults(func=cmd_ask)
+
+    p_w = sub.add_parser("wardrobe", help="view or edit the wardrobe saved between runs")
+    p_w.add_argument("action", nargs="?", default="show",
+                     choices=["show", "add", "remove", "seed", "clear"])
+    p_w.add_argument("name", nargs="?", help="item name (add) or id/name (remove)")
+    p_w.add_argument("--category", help="tops, bottoms, outerwear, shoes or accessories")
+    p_w.add_argument("--colors", default="", help="comma-separated")
+    p_w.add_argument("--tags", default="", help="comma-separated style tags")
+    p_w.add_argument("--notes", default=None)
+    p_w.add_argument("--force", action="store_true", help="seed: replace existing items")
+    p_w.set_defaults(func=cmd_wardrobe)
 
     return parser
 

@@ -12,6 +12,9 @@ env/
 # Jupyter
 .ipynb_checkpoints/
 
+# The user's saved wardrobe (style memory)
+data/my_wardrobe.json
+
 # Cached model responses
 .cache/
 

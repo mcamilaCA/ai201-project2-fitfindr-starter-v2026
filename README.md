@@ -345,6 +345,26 @@ Each row holds `rank`, `title`, `price`, `vs_cheapest`, `size`, `condition` and 
 | (one listing matched) | 1 | empty | no |
 | designer ballgown size XXS under $5 | 0 | empty | yes, stopped before any model call |
 
+### 3. Style Memory
+
+The wardrobe is saved to `data/my_wardrobe.json` (gitignored — it's the user's own closet), so it carries over between runs. The logic is in `wardrobe_store.py`; `run_agent` and the three tools are unchanged, because the saved file has the same shape as the example wardrobe.
+
+```
+python app.py wardrobe                                   show what's saved
+python app.py wardrobe seed                              start from the 10-item example wardrobe
+python app.py wardrobe add 'Red cardigan' --category tops --colors red --tags vintage,cozy
+python app.py wardrobe remove w_003                      by id or by name
+python app.py wardrobe clear
+python app.py ask 'vintage graphic tee under $30' --save add the item you find to your wardrobe
+```
+
+- **Which wardrobe `ask` uses:** `--empty-wardrobe` -> an empty one; otherwise the saved wardrobe if there is one; otherwise the example wardrobe (the old behaviour). It prints `(using your saved wardrobe: N items)` when it loads one.
+- **`--save`:** after a successful search, the selected listing becomes a wardrobe item (title, category, colors, style tags, and a note with the platform and price) with the next `w_NNN` id. With no saved wardrobe it starts a new empty one instead of copying the example. It saves nothing when the search failed, and refuses duplicate names.
+- **Failure handling:** a missing, corrupt or wrongly-shaped file is treated as "nothing saved" instead of crashing, and a read never overwrites it. Writes go through a temp file and a rename, so a crash can't leave a half-written wardrobe.
+- **Not touched:** `run_eval.py` and `serve.py` still use the example/empty wardrobes, so eval runs stay repeatable and don't depend on whatever one person has saved.
+
+Checked without the model: add, duplicate name, bad category, remove by id/name, seed (and refusing to overwrite without `--force`), clear, a corrupt file, and `--save` after a no-match query (saves nothing). Checked with the model: `ask ... --save` saved `w_001`, the next `ask` loaded it, and saving the same item again was rejected.
+
 
 
 ---
