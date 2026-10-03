@@ -40,7 +40,7 @@
 ## What This Does
 
 <!-- Three or four sentences: what a user asks for, and what they get back. -->
-
+This system is meant to help find thrift items and simmultaneously creating outfits and providing a quick caption to use in social media. It uses 'search_listings' to give individual items lists, 'outfit_suggest' to create the outfits based on item selected and wardrobe, and 'create_fit_card' which is where your social media caption comes from. 
 
 
 ---
