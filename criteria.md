@@ -25,9 +25,16 @@ Given a query that matches at least one listing, the agent completes all three
 tool calls and returns a fit card — in at least 4 of 5 tries.
 
 **Why this target:**
-<!-- Why 4 of 5 and not 5 of 5? Something about your search, probably —
-     "my search is a plain keyword match and some phrasings will miss" is a
-     real answer. -->
+
+`search_listings` scores listings by plain keyword overlap between the query's
+description and each listing's title, description, and style_tags — no
+synonym handling, no stemming. That means a listing can be a genuine match in
+plain English and still score zero, just because the query used a different
+word for the same thing ("tee" vs. a listing that only says "t-shirt"). Five
+"matching" queries picked by a person won't all phrase things the way the
+data happens to, so I'd expect to lose one in five to word choice alone, not
+to a bug in the loop. If I ever want 5/5 here, the fix is in the scoring
+function, not the test.
 
 ---
 
@@ -37,66 +44,81 @@ Given a query that matches no listings, the agent stops before calling
 `suggest_outfit` and returns a message naming what to change — 5 of 5 tries.
 
 **Why this target:**
-<!-- Why is 5 of 5 reasonable here when criterion 1 isn't? What's different
-     about this path? -->
+
+Criterion 1 depends on the keyword-overlap score finding a match, which is a
+fuzzy judgment about phrasing — that's where the uncertainty in criterion 1
+comes from. This criterion doesn't touch that scoring logic at all: by the
+time the branch runs, `search_listings` has already returned its answer, and
+the branch is just `if not results: stop`, a plain emptiness check on a
+Python list with no judgment call left in it. There's no equivalent to a
+missed synonym on this side — either the list is empty or it isn't, and an
+`if` statement doesn't have an off day. If this ever misses 5/5, that points
+at a real bug in the branch, not at expected variance.
 
 ---
 
 ## 3. Something about state
 
-<!-- YOU WRITE THIS ONE.
-
-     How would you know that the item your search found is the same item the
-     next tool received? Name something countable or observable.
-
-     This is the criterion people find hardest, because state failure doesn't
-     look like state failure — it looks like a tool problem. Something that
-     compares session["selected_item"] against what actually reached
-     suggest_outfit is the shape you're after. -->
-
-
+Given a query that matches at least one listing, `session["selected_item"]["id"]`
+equals the `new_item["id"]` that `suggest_outfit` actually receives — 5 of 5
+tries.
 
 **Why this target:**
 
-
+In unit 3, `selected_item` goes straight from the session into `suggest_outfit`
+as the same Python object — nothing serializes it or reconstructs it in
+between, so there's no honest mechanism for the two ids to disagree today.
+5/5 is the right target precisely because this is the number to watch once
+that stops being true: next unit, `search_listings` moves onto MCP, and its
+results start crossing a real boundary (JSON out, JSON back). That's a
+concrete way for an id to get dropped, coerced, or swapped without any tool
+raising an error — it would just look like `suggest_outfit` producing a
+slightly odd outfit, not like a state bug. Catching that requires this exact
+check, which is why it's worth writing down now, before the rewire, rather
+than after.
 
 ---
 
 ## 4. Something about the fit card
 
-<!-- YOU WRITE THIS ONE.
-
-     The fit card calls a model, so the same input can produce different words
-     each time. That's not a bug — it's the nature of the tool. So what would
-     make it acceptable?
-
-     Think about what you'd actually be unhappy to see. A caption that never
-     mentions the price? Two different items producing the same opening
-     sentence? A card longer than a caption anyone would post? Any of those can
-     be turned into a number. -->
-
-
+Given the same item and outfit suggestion, run `create_fit_card` 5 times; the
+caption stays at or under 4 sentences — matching the tool's own documented
+return contract — in at least 4 of 5 tries.
 
 **Why this target:**
 
-
+`create_fit_card`'s own spec (`tools.py`) says it returns a two-to-four
+sentence caption — so this criterion is just holding the tool to the contract
+it already claims for itself, not inventing a new one. It's not 5 of 5 because
+the prompt can tell the model to stay in that range, but it can't force
+sentence count the way code can enforce a loop condition — at TEMPERATURE > 0,
+the model paces itself, and occasionally running one sentence long is the kind
+of variance that's expected from a generative tool rather than a sign the
+prompt is wrong. If it misses by more than one in five, that points at the
+prompt, not at the model being noisy.
 
 ---
 
-## 5. Your choice
+## 5. Your choice — the relaxed retry
 
-<!-- YOU WRITE THIS ONE TOO.
-
-     Pick something you actually care about getting right. Speed, the empty
-     wardrobe path, what happens when the model can't be reached, whether the
-     search respects a price ceiling — anything, as long as it names a number
-     or an observable outcome. -->
-
-
+Given a query that fails to match under its stated `max_price` but would match
+with that filter dropped, the agent retries with `max_price` removed, sets
+`session["relaxed"]` to `True`, ends up with a non-empty `search_results`, and
+returns output that names the filter it dropped — 5 of 5 tries.
 
 **Why this target:**
 
-
+This is the branch rule I already committed to in my README's Planning Loop
+section, so it deserves the same scrutiny as the other branches. 5 of 5 is
+reasonable here, unlike criterion 1, because the retry only has one job once
+it fires: strip `max_price` from the parsed query and search again — there's
+no keyword-matching ambiguity at that step, since the description and size
+are untouched between the two attempts. The real risk isn't the retry search
+missing — it's the regex that extracts `max_price` not recognizing the
+phrasing in the query, so the branch never fires at all. I'm controlling for
+that by only testing queries that use the "under $X" phrasing my regex is
+built to catch; a query phrased some other way is a parsing problem, which
+belongs to criterion 1, not this one.
 
 ---
 
