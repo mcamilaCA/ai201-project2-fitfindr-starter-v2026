@@ -153,15 +153,15 @@ Scored these classic medium wash 501s on Depop for just $38.00 and I am fully le
 
 **Moment 1**
 
-- *What I asked for:*
-- *What came back:*
-- *What I changed:*
+- *What I asked for:* Help for best designing parctices for outfit design 
+- *What came back:* An explanation broken down in steps on things to consider
+- *What I changed:* I made the designing decisions (what should a "relaxed" state run do, and what would happen if it did not return anything? What things could potentially break the code? which items can differ from one function to another in integration time and how to tackle it, etc)
 
 **Moment 2**
 
-- *What I asked for:*
-- *What came back:*
-- *What I changed:*
+- *What I asked for:*  I asked for running the program with several clothes parameters 
+- *What came back:* output of the runs with some issues (item not found, or item found but the match made no sense)
+- *What I changed:* adding stop words and a minimum score for matching criteria
 
 <!-- ═══════════════════════ UNIT 4 — THE TEST ═══════════════════════
 
