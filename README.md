@@ -124,19 +124,21 @@ $ python app.py ask '...'
 **The three tools, tested one at a time**
 
 ```
-$ python -c "from tools import search_listings; print(search_listings('graphic tee', max_price=30))"
-
+$ python3 -c "from tools import search_listings; print([(l['id'], l['title'], l['size'], l['price']) for l in search_listings('graphic tee', max_price=30)])"
+[('lst_002', 'Y2K Baby Tee — Butterfly Print', 'S/M', 18.0), ('lst_006', 'Graphic Tee — 2003 Tour Bootleg Style', 'L', 24.0), ('lst_017', 'Mesh Long-Sleeve Top — Black', 'S/M', 15.0), ('lst_033', 'Vintage Band Tee — Faded Grey', 'L', 19.0), ('lst_011', 'Low-Rise Cargo Pants — Khaki', 'W29', 27.0), ('lst_015', 'Vintage Graphic Hoodie — Faded Black', 'L', 26.0)]
 ```
 
 ```
-$ python -c "from tools import suggest_outfit; ..."
-
+$ python3 -c "from tools import suggest_outfit; from utils.data_loader import get_example_wardrobe, load_listings; print(suggest_outfit(load_listings()[0], get_example_wardrobe()).replace(chr(10), ' '))"
+* Tuck the white ribbed tank top into the 501s, layer the oversized grey crewneck sweatshirt on top, and finish with chunky white sneakers and the black crossbody bag. * Pair the 501s with the black cropped zip hoodie, vintage black denim jacket, and black combat boots for an all-denim streetwear look.
 ```
 
 ```
-$ python -c "from tools import create_fit_card; ..."
-
+$ python3 -c "from tools import create_fit_card; from utils.data_loader import load_listings; print(create_fit_card('jeans and white sneakers', load_listings()[0]).replace(chr(10), ' '))"
+Scored these classic medium wash 501s on Depop for just $38.00 and I am fully leaning into that effortless 90s skater aesthetic today. 👖 I tossed them on with my favorite crisp white sneakers for that no-fuss, everyday cool-girl look. 👟 Honestly, the slight fading at the knees gives them that broken-in character you just can't fake. ✨  #VintageDenim #DepopFinds #StreetwearStyle
 ```
+
+(The `.replace(chr(10), ' ')` just collapses the model's newlines so each tool's output is one line.)
 
 ---
 
