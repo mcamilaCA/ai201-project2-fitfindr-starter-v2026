@@ -76,7 +76,7 @@
 - **What it does:** Gives you a ready-to-post caption in case you want to post on social media
 - **Inputs:** 'outfit' (string), 'new_item' (dictionary)
 - **Returns:** Two to four sentences of a potential caption for your outfit. 
-- **When it has nothing:** It gives a "safe-caption", meaning caption that could fit any (fashion) context
+- **When it has nothing:** If `outfit` is empty or whitespace, it returns a descriptive message string (e.g. explaining that no outfit was provided, so no fit card could be made) instead of raising or calling the model.
 
 ---
 

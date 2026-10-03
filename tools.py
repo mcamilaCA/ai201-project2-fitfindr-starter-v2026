@@ -140,6 +140,66 @@ def search_listings(
 
 # ── Tool 2: suggest_outfit ────────────────────────────────────────────────────
 
+_SUGGEST_OUTFIT_SYSTEM = (
+    "You are a styling assistant for a thrift-finds app. A user is "
+    "considering buying a secondhand item and wants outfit ideas. Respond "
+    "with a short paragraph, or a list of up to 4 bullet points — never more "
+    "than 4. Each bullet is one complete outfit, not a single piece. Be "
+    "concrete: name colors, categories, and specific pieces when they're "
+    "given to you."
+)
+
+
+def _describe_item(item: dict) -> str:
+    # shared by both prompt builders below — brand is often None, so it's
+    # left out rather than printed as "Brand: None"
+    colors = ", ".join(item.get("colors") or [])
+    style_tags = ", ".join(item.get("style_tags") or [])
+    lines = [
+        f"Item: {item.get('title')}",
+        f"Category: {item.get('category')}",
+        f"Colors: {colors}",
+        f"Style: {style_tags}",
+    ]
+    if item.get("description"):
+        lines.append(f"Description: {item['description']}")
+    return "\n".join(lines)
+
+
+def _format_wardrobe_items(items: list[dict]) -> str:
+    # one line per item, not grouped by category — layering a look can mix
+    # categories (top + top, top + bottom), and a flat list lets the model
+    # combine any of them freely instead of picking one per group
+    lines = []
+    for item in items:
+        colors = ", ".join(item.get("colors") or [])
+        style_tags = ", ".join(item.get("style_tags") or [])
+        line = f"- {item['name']} ({item['category']}; colors: {colors}; style: {style_tags})"
+        if item.get("notes"):
+            line += f" — {item['notes']}"
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def _build_specific_prompt(new_item: dict, items: list[dict]) -> str:
+    return (
+        f"{_describe_item(new_item)}\n\n"
+        f"Here's what they already own:\n{_format_wardrobe_items(items)}\n\n"
+        "Suggest 1-2 outfits that pair this item with pieces from their "
+        "wardrobe. You may combine multiple tops, bottoms, or layers from "
+        "the list to build a look."
+    )
+
+
+def _build_general_prompt(new_item: dict) -> str:
+    return (
+        f"{_describe_item(new_item)}\n\n"
+        "This user doesn't have a wardrobe on file yet. Suggest general "
+        "styling directions for this item — what colors, categories, or "
+        "styles would pair well — without assuming specific pieces they own."
+    )
+
+
 def suggest_outfit(new_item: dict, wardrobe: dict) -> str:
     """
     Given a thrifted item and the user's wardrobe, suggest one or two outfits.
@@ -168,11 +228,48 @@ def suggest_outfit(new_item: dict, wardrobe: dict) -> str:
     Test it from a terminal before you move on:
         python -c "from tools import suggest_outfit; from utils.data_loader import get_example_wardrobe, load_listings; print(suggest_outfit(load_listings()[0], get_example_wardrobe()))"
     """
-    # TODO: replace this with your implementation
-    return ""
+    items = wardrobe["items"]
+    # branch on what's available to build on: a wardrobe to combine with, or
+    # just the item on its own
+    if items:
+        prompt = _build_specific_prompt(new_item, items)
+    else:
+        prompt = _build_general_prompt(new_item)
+    return generate(prompt, system=_SUGGEST_OUTFIT_SYSTEM)
 
 
 # ── Tool 3: create_fit_card ───────────────────────────────────────────────────
+
+_FIT_CARD_SYSTEM = (
+    "You write short social media captions for a thrift-finds app. The user "
+    "just found a secondhand item and wants a ready-to-post caption about it.\n\n"
+    "Rules:\n"
+    "- Write 2 to 4 sentences, in the first person, like a real post — not a "
+    "product description.\n"
+    "- Mention the item, its exact price (e.g. \"$18.00\"), and the platform it "
+    "was found on, each exactly once.\n"
+    "- Pick ONE look from the outfit ideas and build the caption around it. Do "
+    "not list or summarize several outfits.\n"
+    "- Commit to a specific vibe (name the mood, era, or aesthetic) instead of "
+    "generic praise.\n"
+    "- Use at most 1 emoji per sentence.\n"
+    "- You may end with 1 to 3 hashtags on their own final line. Hashtags are "
+    "optional and are not part of the sentence count.\n"
+    "- Output only the caption. No quotes around it, no preamble like \"Here's "
+    "your caption\"."
+)
+
+
+def _build_fit_card_prompt(outfit: str, new_item: dict) -> str:
+    # price is formatted here, not left to the model, so the exact dollar
+    # amount is guaranteed to be in the prompt
+    return (
+        f"{_describe_item(new_item)}\n"
+        f"Price: ${new_item.get('price', 0):.2f}\n"
+        f"Platform: {new_item.get('platform')}\n\n"
+        f"Outfit ideas:\n{outfit}\n\n"
+        "Write the caption."
+    )
 
 def create_fit_card(outfit: str, new_item: dict) -> str:
     """
@@ -208,5 +305,9 @@ def create_fit_card(outfit: str, new_item: dict) -> str:
     Test it from a terminal before you move on:
         python -c "from tools import create_fit_card; from utils.data_loader import load_listings; print(create_fit_card('jeans and white sneakers', load_listings()[0]))"
     """
-    # TODO: replace this with your implementation
-    return ""
+    if not outfit or not outfit.strip():
+        return (
+            "No outfit was provided, so a fit card couldn't be made. "
+            "Get outfit suggestions for this item first, then try again."
+        )
+    return generate(_build_fit_card_prompt(outfit, new_item), system=_FIT_CARD_SYSTEM).strip()
