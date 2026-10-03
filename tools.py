@@ -20,9 +20,56 @@ That last line is what your loop branches on. "Returns a list" earns nothing —
 the description has to say what is *in* the list.
 """
 
-import config  # noqa: F401 — you'll use this in search_listings
+import re
+
+import config
 from generate import generate
 from utils.data_loader import load_listings
+
+
+def _tokenize(text: str) -> set[str]:
+    # lowercase word/number chunks, used for both size and keyword matching
+    return set(re.findall(r"[a-z0-9]+", text.lower()))
+
+
+def _size_matches(query_size: str, listing_size: str) -> bool:
+    # token subset match: "M" -> {"m"} must be subset of "S/M" -> {"s","m"}
+    # avoids substring bugs like "s" in "us 9" or "l" in "xl"
+    query_tokens = _tokenize(query_size)
+    listing_tokens = _tokenize(listing_size)
+    return bool(query_tokens) and query_tokens.issubset(listing_tokens)
+
+
+def _keyword_score(description: str, listing: dict) -> int:
+    # raw overlap count between description words and the listing's text
+    query_tokens = _tokenize(description)
+    listing_text = " ".join([
+        listing.get("title", ""),
+        listing.get("description", ""),
+        listing.get("category", ""),
+        " ".join(listing.get("style_tags") or []),
+        listing.get("brand") or "",
+    ])
+    return len(query_tokens & _tokenize(listing_text))
+
+
+def _filter_and_score(
+    listings: list[dict],
+    description: str,
+    size: str | None,
+    max_price: float | None,
+) -> list[dict]:
+    # shared by the strict pass and the relaxed (no max_price) retry
+    candidates = listings
+    if max_price is not None:
+        candidates = [l for l in candidates if l["price"] <= max_price]
+    if size is not None:
+        candidates = [l for l in candidates if _size_matches(size, l["size"])]
+
+    scored = [(_keyword_score(description, l), l) for l in candidates]
+    scored = [pair for pair in scored if pair[0] > 0]
+    scored.sort(key=lambda pair: pair[0], reverse=True)
+    return [l for _, l in scored[: config.SEARCH_RESULT_LIMIT]]
 
 
 # ── Tool 1: search_listings ───────────────────────────────────────────────────
@@ -78,7 +125,16 @@ def search_listings(
     Test it from a terminal before you move on:
         python -c "from tools import search_listings; print(search_listings('graphic tee', max_price=30))"
     """
-    # TODO: replace this with your implementation
+    listings = load_listings()
+
+    strict = _filter_and_score(listings, description, size, max_price)
+    if strict:
+        return strict
+
+    # relaxed retry: drop max_price only, keep size + keyword requirements
+    if max_price is not None:
+        return _filter_and_score(listings, description, size, None)
+
     return []
 
 
