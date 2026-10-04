@@ -78,7 +78,7 @@ def build_comparison(results: list[dict], top: int = COMPARE_TOP_N) -> list[dict
 
 _PRICE_RE = re.compile(
     r"\b(?:under|below|less than|max(?:imum)?|up to)\s*\$?\s*(\d+(?:\.\d+)?)(?:\s*(?:dollars?|bucks|usd)\b)?"
-    r"|\$\s*(\d+(?:\.\d+)?)",
+    r"|\$\s*(\d+(?:\.\d+)?)(?:\s*(?:or\s+(?:less|under|below|cheaper)|and\s+(?:under|below)|max)\b)?",
     re.IGNORECASE,
 )
 _SIZE_RE = re.compile(r"\bsize\s+([A-Za-z0-9/]+)", re.IGNORECASE)
