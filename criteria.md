@@ -103,8 +103,7 @@ prompt, not at the model being noisy.
 
 Given a query that fails to match under its stated `max_price` but would match
 with that filter dropped, the agent retries with `max_price` removed, sets
-`session["relaxed"]` to `True`, ends up with a non-empty `search_results`, and
-returns output that names the filter it dropped — 5 of 5 tries.
+`session["relaxed"] == "max_price"`, ends up with a non-empty `search_results`, and sets `session["notice"]` to a message that states nothing matched under the original max_price — 5 of 5 tries.
 
 **Why this target:**
 
