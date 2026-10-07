@@ -16,9 +16,11 @@ Build and test your three tools in `tools.py` first. Then come here.
 import re
 
 import config
+import mcp_client
 import trace
 from tools import search_listings, suggest_outfit, create_fit_card, unmatched_keywords
 from generate import ModelUnavailable
+from mcp_client import call_tool
 
 
 # ── session state ─────────────────────────────────────────────────────────────
@@ -212,9 +214,16 @@ def run_agent(query: str, wardrobe: dict) -> dict:
         count += 1
         trace.check_iterations(count)
 
-        session["search_results"] = search_listings(
-            session["parsed"]["description"], session["parsed"]["size"], max_price
-        )
+        # session["search_results"] = search_listings(
+        #     session["parsed"]["description"], session["parsed"]["size"], max_price
+        # )
+
+        session["search_results"] = mcp_client.call_tool("search_listings", {
+            "description": session["parsed"]["description"],
+            "size": session["parsed"]["size"],
+            "max_price": max_price
+        })
+
         if session["search_results"]:
             if max_price is None and session["parsed"]["max_price"] is not None:
                 session["relaxed"] = "max_price"
