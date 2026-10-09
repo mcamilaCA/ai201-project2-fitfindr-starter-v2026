@@ -155,6 +155,12 @@ def _ask_one(query, wardrobe, use_trace):
             print("  So there is no outfit advice or fit card for this item — the listing")
             print("  above came from the local search, not from the model.")
         else:
+            if not wardrobe["items"]:
+                print("  Note:     Your wardrobe is empty, so these ideas are general — they")
+                print("            don't use pieces you own. To get tailored outfits, add some:")
+                print("              python app.py wardrobe add 'Name' --category tops")
+                print("              python app.py ask '...' --save   (keeps what you find)")
+                print()
             print(f"  Outfit:   {session['outfit_suggestion']}")
             print()
             print(f"  Fit card: {session['fit_card']}")
