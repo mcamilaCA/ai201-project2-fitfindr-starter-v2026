@@ -354,24 +354,45 @@ Nothing about the results changed: the call returns the same list of dicts, so t
 
      `python run_eval.py --label after` -->
 
-**What I changed:**
+**What I changed:** `run_eval.py` now records the evidence criteria 3 and 5 name, instead of leaving me to infer it from titles and notice text.
+- `run_once` wraps `agent.suggest_outfit` in a spy that records the `id` of the `new_item` it actually receives, then restores the original.
+- Each try in the report now logs `selected_item id`, `id received by suggest_outfit`, an `ids match: yes/NO` line, `session['relaxed']` and `session['notice']`.
+- The agent, the tools and `scenarios.py` are unchanged.
 
-**Which failure it was meant to fix:**
+**Which failure it was meant to fix:** Not a failure in the agent. A weakness in my evidence. The "Before" PASS cells for criterion 3 rested on matching item titles (not ids), and for criterion 5 on seeing the notice text in the fit card (not on `session["relaxed"]` or `session["notice"]`). Those PASSes were readings of the trace, not checks of what the criteria say, so the 5/5 verdicts could have hidden an id swapped across the MCP boundary or a retry that never set `relaxed`.
 
 ### Run Log — After
 
-| Criterion | Target | Try 1 | Try 2 | Try 3 | Try 4 | Try 5 | Verdict |
-|---|---|---|---|---|---|---|---|
-| 1.  |  |  |  |  |  |  |  |
-| 2.  |  |  |  |  |  |  |  |
-| 3.  |  |  |  |  |  |  |  |
-| 4.  |  |  |  |  |  |  |  |
-| 5.  |  |  |  |  |  |  |  |
+|            Criterion            | Target | Try 1| Try 2| Try 3| Try 4| Try 5|  Verdict  |
+|---------------------------------|--------|------|------|------|------|------|-----------|
+| 1. matching query completes     | 4 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 2. impossible query stops early | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 3. selected item id is correct  | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 4. fit card at most 4 sentences | 4 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 5. relax run drops max_price    | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+
+Evidence from `results/run_2026-10-09_1728_after.md`:
+
+```
+criterion 3 (denim jacket under $50), tries 1-5, every try:
+  selected_item id: 'lst_007'
+  id received by suggest_outfit: 'lst_007'
+  ids match: yes
+
+criterion 5 (jeans under $25), tries 1-5, every try:
+  selected_item id: 'lst_001'  ·  id received by suggest_outfit: 'lst_001'  ·  ids match: yes
+  session['relaxed']: 'max_price'
+  session['notice']: 'Nothing matched under $25, so I searched again without the price limit. This result may cost more than you wanted.'
+```
 
 **Did it help, and how do I know:**
 
 <!-- If it made things worse, say that. Honestly reported, that earns full
      credit and is more interesting than one that worked. -->
+
+It didn't change any result, but it made two verdicts evidence-backed. Criterion 3 is now confirmed by ids: in 5 of 5 tries `selected_item["id"]` equalled the id `suggest_outfit` received (lst_007), so nothing is dropped or swapped when the result crosses the MCP boundary. Criterion 5 is confirmed on the session fields: in 5 of 5 tries `session["relaxed"] == "max_price"`, `session["notice"]` stated nothing matched under $25, and `search_results` had 3 items. The other three criteria stayed 5/5, so the change did not break anything.
+
+Remaining limits: the id check still covers only one query per criterion (lst_007 and lst_001), and the `ids match: NO` line on the impossible-query scenario is expected, since no item is selected there and `suggest_outfit` is never called.
 
 
 

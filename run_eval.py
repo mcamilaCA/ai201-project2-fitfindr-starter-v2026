@@ -39,6 +39,7 @@ import scenarios as scenario_module
 
 def run_once(scenario, use_trace=True):
     """One scenario, one try. Returns everything worth recording."""
+    import agent
     from agent import run_agent
     from utils.data_loader import get_example_wardrobe, get_empty_wardrobe
     import trace as trace_module
@@ -50,12 +51,25 @@ def run_once(scenario, use_trace=True):
     if use_trace:
         trace_module.start_trace()
 
-    record = {"error": None, "session": None, "trace": "", "crashed": None}
+    record = {"error": None, "session": None, "trace": "", "crashed": None,
+              "received_ids": []}
+
+    # Spy on suggest_outfit so the log shows the id it ACTUALLY received,
+    # not just the id the session says was selected (criterion 3).
+    real_suggest_outfit = agent.suggest_outfit
+
+    def spy(new_item, wardrobe_arg):
+        record["received_ids"].append(new_item.get("id"))
+        return real_suggest_outfit(new_item, wardrobe_arg)
+
+    agent.suggest_outfit = spy
     try:
         record["session"] = run_agent(scenario["query"], wardrobe)
     except Exception as exc:  # noqa: BLE001 — a crash is a result worth logging
         record["crashed"] = f"{type(exc).__name__}: {exc}"
         record["traceback"] = traceback.format_exc()
+    finally:
+        agent.suggest_outfit = real_suggest_outfit
 
     if use_trace:
         record["trace"] = trace_module.get_trace()
@@ -191,6 +205,13 @@ def write_report(rows, args):
                 f"- selected_item: {item.get('title', '(none)')}"
                 + (f" (${item.get('price')}, {item.get('platform')})" if item else ""),
                 f"- search_results: {len(session.get('search_results') or [])}",
+                # Criterion 3: the id in the session vs the id suggest_outfit received.
+                f"- selected_item id: {item.get('id')!r}",
+                f"- id received by suggest_outfit: {record['received_ids'][-1] if record['received_ids'] else None!r}",
+                f"- ids match: {'yes' if record['received_ids'] and record['received_ids'][-1] == item.get('id') else 'NO'}",
+                # Criterion 5: the relaxed-retry fields, read straight from the session.
+                f"- session['relaxed']: {session.get('relaxed')!r}",
+                f"- session['notice']: {session.get('notice')!r}",
                 "",
             ]
             if session.get("outfit_suggestion"):
