@@ -200,19 +200,55 @@ Scored these classic medium wash 501s on Depop for just $38.00 and I am fully le
      `python run_eval.py --label before` runs everything and writes the table
      into results/. Paste it here and fill in the verdicts. -->
 
-| Criterion | Target | Try 1 | Try 2 | Try 3 | Try 4 | Try 5 | Verdict |
-|---|---|---|---|---|---|---|---|
-| 1.  |  |  |  |  |  |  |  |
-| 2.  |  |  |  |  |  |  |  |
-| 3.  |  |  |  |  |  |  |  |
-| 4.  |  |  |  |  |  |  |  |
-| 5.  |  |  |  |  |  |  |  |
+|           Criterion             | Target | Try 1 | Try 2 | Try 3 | Try 4 | Try 5 |  Verdict  |
+|---------------------------------|--------|-------|-------|-------|-------|-------|-----------|
+| 1. matching query completes     | 4 of 5 |  PASS | PASS  | PASS  | PASS  | PASS  | MET (5/5) |
+| 2. impossible query stops early | 5 of 5 |  PASS | PASS  | PASS  | PASS  | PASS  | MET (5/5) |
+| 3. selected item id is correct  | 5 of 5 |  PASS | PASS  | PASS  | PASS  | PASS  | MET (5/5) |
+| 4. fit card at most 4 sentences | 4 of 5 |  PASS | PASS  | PASS  | PASS  | PASS  | MET (5/5) |
+| 5. relax run drops max_price    | 5 of 5 |  PASS | PASS  | PASS  | PASS  | PASS  | MET (5/5) |
 
 **Real output from one try**, pasted as text, naming the file and function
 that produced it:
 
-```
+Criterion 5, try 1 (`jeans under $25`, example wardrobe). The trace comes from
+`agent.py::run_agent` (loop, retry and notice), the Fit card from
+`tools.py::create_fit_card`, and the run was driven by `run_eval.py::run_once`.
 
+```
+- stopped early: no
+- selected_item: Vintage Levi's 501 Jeans — Medium Wash ($38.0, depop)
+- search_results: 3
+
+Outfit suggestion:
+* Pair the medium wash Levi's 501s with the white ribbed tank top tucked in, layered under the slightly cropped vintage black denim jacket, and finish with the chunky white sneakers and black crossbody bag.
+* Style the jeans with the oversized grey crewneck sweatshirt worn loose over the top, accessorized with the brown leather belt, and ground the look with the black combat boots.
+
+Fit card:
+Nothing matched under $25, so I searched again without the price limit. This result may cost more than you wanted.
+
+Scored these vintage Levi's 501 jeans on depop for just $38.00 and they already have that perfect worn-in look. I am leaning fully into effortless 90s streetwear by wearing them with an oversized grey crewneck sweatshirt. A brown leather belt and black combat boots finish the slouchy vibe. 👟
+#VintageDenim #DepopFinds #StreetwearStyle
+
+Trace:
+[1] parse_query
+      in:  jeans under $25
+      out: {'description': 'jeans', 'size': None, 'max_price': 25.0}
+[2] search_listings (via MCP)
+      in:  description='jeans', size=None, max_price=25.0
+      out: [] (empty)
+      →    empty — retrying without max_price
+[3] search_listings (via MCP)
+      in:  description='jeans', size=None, max_price=None
+      out: 3 items: Vintage Levi's 501 Jeans — Medium Wash, Baggy Carpenter Jeans — Dark Wash, Straight Leg Black Jeans — Faded
+[4] build_comparison
+      in:  3 results
+      out: 3 rows
+      →    branch: more than one match, comparing prices
+[5] suggest_outfit
+      in:  item="Vintage Levi's 501 Jeans — Medium Wash", wardrobe_items=10
+[6] create_fit_card
+      in:  item="Vintage Levi's 501 Jeans — Medium Wash", outfit from step above
 ```
 
 ---
@@ -237,13 +273,17 @@ that produced it:
 
 | # | Criterion | Target | Verdict | How I decided |
 |---|---|---|---|---|
-| 1 |  |  |  |  |
-| 2 |  |  |  |  |
-| 3 |  |  |  |  |
-| 4 |  |  |  |  |
-| 5 |  |  |  |  |
+| 1 | A matching query completes all three tools | 4 of 5 | MET (5/5) | All five tries ran `search_listings`, `suggest_outfit` and `create_fit_card` and returned a fit card. |
+| 2 | An impossible query stops before the second tool | 5 of 5 | MET (5/5) | All five tries returned no results, stopped before any model call, and the message listed what to change. |
+| 3 | `selected_item` matches what `suggest_outfit` receives | 5 of 5 | MET (5/5) | In all five tries the selected item and the item in the `suggest_outfit` trace step were both "Denim Jacket — Light Wash, Cropped". The log shows titles, not ids. |
+| 4 | Fit card caption is at most 4 sentences | 4 of 5 | MET (5/5) | I counted sentences in the five captions, excluding hashtags. Each had 3. |
+| 5 | Relaxed retry drops `max_price` | 5 of 5 | MET (5/5) | In all five tries the first search was empty, the retry returned 3 results, and the "Nothing matched under $25" notice was prepended to the fit card. |
 
 **Diagnoses**
+
+No criterion missed, so there is no failure to diagnose. One earlier run (16:32) is not counted: the API key was rejected, every model call failed, and criteria 1 and 4 could not be measured. That was an environment problem, not a miss in the loop, a tool, the session or the model's output. After fixing the key I reran, and the table above is from that run.
+
+Two limits on these results. Criterion 3 was checked by item title because the log doesn't print ids. Criterion 4 had only five captions, all at 3 sentences, so it doesn't show the model can't run over 4 at temperature 0.9.
 
 
 
