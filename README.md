@@ -271,17 +271,17 @@ Trace:
      Look for a pattern. Three misses on the same tool is one problem, not
      three. -->
 
-| # | Criterion | Target | Verdict | How I decided |
-|---|---|---|---|---|
-| 1 | A matching query completes all three tools | 4 of 5 | MET (5/5) | All five tries ran `search_listings`, `suggest_outfit` and `create_fit_card` and returned a fit card. |
-| 2 | An impossible query stops before the second tool | 5 of 5 | MET (5/5) | All five tries returned no results, stopped before any model call, and the message listed what to change. |
+| # |                      Criterion                         | Target |   Verdict | How I decided |
+|---|--------------------------------------------------------|--------|-----------|---------------|
+| 1 | A matching query completes all three tools             | 4 of 5 | MET (5/5) | All five tries ran `search_listings`, `suggest_outfit` and `create_fit_card` and returned a fit card. |
+| 2 | An impossible query stops before the second tool       | 5 of 5 | MET (5/5) | All five tries returned no results, stopped before any model call, and the message listed what to change. |
 | 3 | `selected_item` matches what `suggest_outfit` receives | 5 of 5 | MET (5/5) | In all five tries the selected item and the item in the `suggest_outfit` trace step were both "Denim Jacket — Light Wash, Cropped". The log shows titles, not ids. |
-| 4 | Fit card caption is at most 4 sentences | 4 of 5 | MET (5/5) | I counted sentences in the five captions, excluding hashtags. Each had 3. |
-| 5 | Relaxed retry drops `max_price` | 5 of 5 | MET (5/5) | In all five tries the first search was empty, the retry returned 3 results, and the "Nothing matched under $25" notice was prepended to the fit card. |
+| 4 | Fit card caption is at most 4 sentences                | 4 of 5 | MET (5/5) | I counted sentences in the five captions, excluding hashtags. Each had 3. |
+| 5 | Relaxed retry drops `max_price`                        | 5 of 5 | MET (5/5) | In all five tries the first search was empty, the retry returned 3 results, and the "Nothing matched under $25" notice was prepended to the fit card. |
 
 **Diagnoses**
 
-No criterion missed, so there is no failure to diagnose. One earlier run (16:32) is not counted: the API key was rejected, every model call failed, and criteria 1 and 4 could not be measured. That was an environment problem, not a miss in the loop, a tool, the session or the model's output. After fixing the key I reran, and the table above is from that run.
+No criterion missed, so there is no failure to diagnose. One earlier run (16:32) is not counted: the API key was rejected, every model call failed, and criteria 1 and 4 could not be measured since I had still the wrong key for testing the scenario. That was an environment problem, not a miss in the loop, a tool, the session or the model's output. After fixing the key I reran, and the table above is from that run.
 
 Two limits on these results. Criterion 3 was checked by item title because the log doesn't print ids. Criterion 4 had only five captions, all at 3 sentences, so it doesn't show the model can't run over 4 at temperature 0.9.
 
