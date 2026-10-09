@@ -461,7 +461,14 @@ Checked without the model: add, duplicate name, bad category, remove by id/name,
      you did. "I ran out of time" is fine if it's true. Pretending nothing is
      left is not. -->
 
+All five criteria are MET in the latest run, so nothing is failing. What is still weak is how much the evidence proves:
 
+- **Criterion 1 (matching query completes):** all five tries used the same query, and search is deterministic, so they are effectively one try on the search side. The word-choice risk named in the criterion ("tee" vs "t-shirt") was never exercised. I'd add a second matching query phrased differently, or add synonym handling in `search_listings`. I stopped because the 4 of 5 target already allows for this.
+- **Criteria 3 and 5 (state and relaxed retry):** each is checked on one query (lst_007 and lst_001). The ids and `session` fields are now logged, but a different query could still behave differently. I'd add one more query for each.
+- **Criterion 4 (fit card length):** five captions, with 2 or 3 sentences each, is a small sample at temperature 0.9. The scenario also runs the whole agent, not `create_fit_card` on a fixed item and outfit, so the outfit varies between tries. I'd add a scenario that calls `create_fit_card` directly. The sentence count was also done by hand, and `run_eval.py` doesn't count it.
+- **Unit tests:** `test_units.py` needs `pytest`, which isn't installed in `.venv`, so I haven't run it since changing `run_eval.py`.
+
+I stopped here because the remaining gaps are about stronger evidence, not failures, and the criteria are met under their own targets.
 
 <!-- ═════════════════════════════════════════════════════════════════════
 
