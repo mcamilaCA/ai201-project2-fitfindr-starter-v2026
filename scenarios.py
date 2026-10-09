@@ -35,6 +35,27 @@ SCENARIOS = [
         "wardrobe": "empty",
         "criterion": None,
     },
+    {
+        # session["selected_item"]["id"]` equals the the item id of the item that was selected.
+        "name": "selected item id is correct",
+        "query": "denim jacket under $50",
+        "wardrobe": "example",
+        "criterion": 3,
+    },
+    {
+        # Fit card returns a caption with at most 4 sentence.
+        "name": "fit card with at most 4 sentences",
+        "query": "vintage graphic tee under $30",
+        "wardrobe": "example",
+        "criterion": 4,
+    }, 
+    {
+        # if there is no item found, run a relax run that drops "max_price"
+        "name": "relax run drops max_price",
+        "query": "jeans under $25",
+        "wardrobe": "example",
+        "criterion": 5,
+    }
     # TODO: add what your criteria 3, 4 and 5 need.
     #
     # Set "criterion" to the number in criteria.md that the scenario tests.
