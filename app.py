@@ -134,13 +134,15 @@ def _ask_one(query, wardrobe, use_trace):
     session = run_agent(query, wardrobe)
 
     print()
-    if session["error"]:
+    item = session["selected_item"]
+    model_down = session["error"] and item  # search worked; only the model part failed
+    if session["error"] and not model_down:
         print(f"  {session['error']}")
     else:
         if session["notice"]:
             print(f"  Note:     {session['notice']}")
             print()
-        item = session["selected_item"] or {}
+        item = item or {}
         print(f"  Found:    {item.get('title')} — ${item.get('price')} on {item.get('platform')}")
         table = _price_table(session["comparison"])
         if table:
@@ -148,9 +150,14 @@ def _ask_one(query, wardrobe, use_trace):
             print("  Price comparison (top 3):")
             print(table)
         print()
-        print(f"  Outfit:   {session['outfit_suggestion']}")
-        print()
-        print(f"  Fit card: {session['fit_card']}")
+        if model_down:
+            print(f"  {session['error']}")
+            print("  So there is no outfit advice or fit card for this item — the listing")
+            print("  above came from the local search, not from the model.")
+        else:
+            print(f"  Outfit:   {session['outfit_suggestion']}")
+            print()
+            print(f"  Fit card: {session['fit_card']}")
     print()
 
     if use_trace:
@@ -200,9 +207,16 @@ def cmd_ask(args):
                 wardrobe = get_empty_wardrobe()
                 print("(no saved wardrobe yet — starting one; --save will add what you find)")
 
+    query = args.query
+    if not query and args.empty_wardrobe:
+        # nothing saved and nothing asked: don't wait at a prompt, show the
+        # general styling advice an empty wardrobe gets, using an example query
+        query = EXAMPLE_QUERIES[0]
+        print(f"(no query given — using the example '{query}')")
+
     try:
-        if args.query:
-            session = _ask_one(args.query, wardrobe, args.trace)
+        if query:
+            session = _ask_one(query, wardrobe, args.trace)
             if args.save:
                 _save_found_item(session, wardrobe)
         else:
