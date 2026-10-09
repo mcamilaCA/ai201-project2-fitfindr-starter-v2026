@@ -203,6 +203,7 @@ def run_agent(query: str, wardrobe: dict) -> dict:
     # Parse once from the raw query. session["parsed"] keeps the user's original
     # filters, even after a retry drops one — session["relaxed"] records that.
     session["parsed"] = parse_query(query)
+    trace.step("parse_query", inputs=query, returned=str(session["parsed"]))
 
     # Attempt 1 uses every filter. Attempt 2 (the branch) drops max_price —
     # but only if there was a max_price to drop.
@@ -223,6 +224,17 @@ def run_agent(query: str, wardrobe: dict) -> dict:
             "size": session["parsed"]["size"],
             "max_price": max_price
         })
+        trace.step(
+            "search_listings (via MCP)",
+            inputs=(f"description={session['parsed']['description']!r}, "
+                    f"size={session['parsed']['size']}, max_price={max_price}"),
+            returned=session["search_results"],
+            note="" if session["search_results"] else (
+                "empty — retrying without max_price" if max_price is not None
+                and session["parsed"]["max_price"] is not None
+                and len(attempts) > 1 and count < len(attempts)
+                else "empty — nothing left to relax"),
+        )
 
         if session["search_results"]:
             if max_price is None and session["parsed"]["max_price"] is not None:
@@ -240,6 +252,8 @@ def run_agent(query: str, wardrobe: dict) -> dict:
         tried = f" under ${p['max_price']:g}" if p["max_price"] is not None else ""
         size = f" in size {p['size']}" if p["size"] else ""
         session["suggestions"] = _suggest_changes(p)
+        trace.step("branch: no results", returned=session["suggestions"],
+                   note="stopping before any model call; fit_card stays None")
         session["error"] = (
             f"No match was found for \"{p['description']}\"{size}{tried}"
             f"{', even without the price limit' if p['max_price'] is not None else ''}. What to change:\n- "
@@ -254,18 +268,28 @@ def run_agent(query: str, wardrobe: dict) -> dict:
     # compare and session["comparison"] stays empty.
     if len(session["search_results"]) > 1:
         session["comparison"] = build_comparison(session["search_results"])
+        trace.step("build_comparison", inputs=f"{len(session['search_results'])} results",
+                   returned=f"{len(session['comparison'])} rows",
+                   note="branch: more than one match, comparing prices")
 
     try:
+        n_owned = len(session["wardrobe"]["items"])
         session["outfit_suggestion"] = suggest_outfit(
             session["selected_item"], session["wardrobe"]
         )
+        trace.step("suggest_outfit", inputs=f"item={session['selected_item']['title']!r}, wardrobe_items={n_owned}",
+                   returned=session["outfit_suggestion"],
+                   note="" if n_owned else "branch: empty wardrobe, general advice")
         session["fit_card"] = create_fit_card(
             session["outfit_suggestion"], session["selected_item"]
         )
+        trace.step("create_fit_card", inputs=f"item={session['selected_item']['title']!r}, outfit from step above",
+                   returned=session["fit_card"])
         if session["notice"]:
             session["fit_card"] = f"{session['notice']}\n\n{session['fit_card']}"
     except ModelUnavailable as e:
         session["error"] = f"The model isn't available right now: {e}"
+        trace.step("model call failed", returned=str(e), note="ModelUnavailable")
     return session
 
 

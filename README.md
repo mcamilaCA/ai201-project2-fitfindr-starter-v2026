@@ -264,21 +264,46 @@ that produced it:
 **Happy path**
 
 ```
-
+[1] parse_query
+      in:  vintage graphic tee under $30
+      out: {'description': 'vintage graphic tee', 'size': None, 'max_price': 30.0}
+[2] search_listings (via MCP)
+      in:  description='vintage graphic tee', size=None, max_price=30.0
+      out: 5 items: Y2K Baby Tee — Butterfly Print, Graphic Tee — 2003 Tour Bootleg Style, Vintage Band Tee — Faded Grey … +2 more
+[3] build_comparison
+      in:  5 results
+      out: 3 rows
+      →    branch: more than one match, comparing prices
+[4] suggest_outfit
+      in:  item='Y2K Baby Tee — Butterfly Print', wardrobe_items=10
+      out: * Pair the butterfly baby tee with the dark wash baggy straight-leg jeans, layered under the slightly cropped …
+[5] create_fit_card
+      in:  item='Y2K Baby Tee — Butterfly Print', outfit from step above
+      out: Scored this gorgeous pink and purple butterfly baby tee on Depop for just $18.00. 🦋 I'm styling it for an effo…
 ```
 
 **Empty search**
 
 ```
-
+[1] parse_query
+      in:  designer ballgown size XXS under $5
+      out: {'description': 'designer ballgown', 'size': 'XXS', 'max_price': 5.0}
+[2] search_listings (via MCP)
+      in:  description='designer ballgown', size=XXS, max_price=5.0
+      out: [] (empty)
+      →    empty — retrying without max_price
+[3] search_listings (via MCP)
+      in:  description='designer ballgown', size=XXS, max_price=None
+      out: [] (empty)
+      →    empty — nothing left to relax
+[4] branch: no results
+      out: 3 items: description: no listing contains 'ballgown', 'designer'. Che…
+      →    stopping before any model call; fit_card stays None
 ```
 
-**On the MCP move:** <!-- what changed in your code, and whether anything
-behaved differently afterwards. If the rewire didn't work, say exactly where it
-broke — the error text and the last thing that worked. That earns the point in
-full. -->
+**On the MCP move:** I moved `search_listings` (only that one tool) behind an MCP server. In `mcp_server.py` I registered it with `@mcp.tool()`, typed the inputs (`description: str`, `size: str | None`, `max_price: float | None`) and gave it a docstring that says what it returns, including the empty-list case. The function just calls the real implementation in `tools.py`, imported under an alias so the tool doesn't call itself. In `agent.py`, the direct `search_listings(...)` call in the loop was replaced with `mcp_client.call_tool("search_listings", {...})`. The old call is left commented out above it.
 
-
+Nothing about the results changed: the call returns the same list of dicts, so the retry-without-price branch, the empty-search branch and the price comparison all work as before. The trace labels the step `search_listings (via MCP)` so the hop is visible. The one thing that behaved differently was the environment. Running the app with the system `python3` fails with `MCPError: Couldn't call 'search_listings' over MCP: No module named 'mcp'`, because the `mcp` package is only installed in the project's `.venv`. The server is started as a subprocess on every call, so it needs the same environment as the agent. Running with `.venv/bin/python app.py ...` works.
 
 ---
 
