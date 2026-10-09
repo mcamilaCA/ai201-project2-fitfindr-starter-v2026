@@ -182,6 +182,14 @@ Scored these classic medium wash 501s on Depop for just $38.00 and I am fully le
 - *What came back:* output of the runs with some issues (item not found, or item found but the match made no sense)
 - *What I changed:* adding stop words and a minimum score for matching criteria
 
+**Moment 3**
+
+- *What I asked for:*  I asked it to argue my criterion and the results
+- *What came back:* a good explanation and overview of what each test for the criterion and whether they were addressed
+- *What I changed:* It made me reflect and change how the criterian was being tested & approached for the "fix it" section
+
+
+
 <!-- ═══════════════════════ UNIT 4 — THE TEST ═══════════════════════
 
      Don't fill these in during unit 3.
